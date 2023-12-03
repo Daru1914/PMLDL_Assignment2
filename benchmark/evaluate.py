@@ -17,6 +17,8 @@ import seaborn as sns
 test_data = pd.read_csv("data/test_dataset.csv")
 item_dataset = pd.read_csv("data/item_dataset.csv")
 
+movie_dict = dict(zip(item_dataset['movie_id'], item_dataset['movie_title']))
+
 class MovieLensNet(nn.Module):
     def __init__(self, num_movies, num_users, num_genres_encoded,
                  embedding_size, hidden_dim):
@@ -86,6 +88,7 @@ genres_encoded = genres_encoded.astype(np.float32)
 num_genres = 19
 num_users = 943
 num_movies = 1683
+output_file_path = "top5_recommendations.txt"
 
 test_dataset = MovieLensDataset(test_data, item_dataset, genres_encoded, mlb, max_genre_count=num_genres, num_users=num_users)
 
@@ -108,6 +111,7 @@ with torch.no_grad():
     # Collect the predicted ratings and true ratings
     all_predicted_ratings = []
     all_true_ratings = []
+    user_movie_predictions = {}
 
     for i, batch in tqdm(enumerate(test_loader)):
         movie_id = batch['movie_id']
@@ -125,6 +129,23 @@ with torch.no_grad():
 
         all_predicted_ratings.extend(output.squeeze().tolist())
         all_true_ratings.extend(rating.squeeze().tolist())
+
+        for user, movie, pred_rating in zip(user_id, movie_id, output):
+            user = user.item()
+            movie = movie.item()
+            pred_rating = pred_rating.item()
+
+            if user not in user_movie_predictions:
+                user_movie_predictions[user] = []
+
+            user_movie_predictions[user].append((movie, pred_rating))
+
+    with open(output_file_path, "w", encoding='latin') as output_file:
+        for user, predictions in user_movie_predictions.items():
+            top_5_movies = sorted(predictions, key=lambda x: x[1], reverse=True)[:5]
+            output_file.write(f"User {user}: Top 5 recommended movies:\n")
+            for movie, rating in top_5_movies:
+                output_file.write(f"  Movie {movie_dict[movie]}, Predicted Rating: {rating}\n")
 
     # Plot distribution of true and predicted ratings
     plt.hist(all_true_ratings, bins=np.arange(0, 6, 0.5), alpha=0.5, label='True ratings')
